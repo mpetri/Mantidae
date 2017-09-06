@@ -21,8 +21,8 @@ unsigned MINIBATCH_SIZE = 1;
 
 bool DEBUGGING_FLAG = false;
 
-unsigned TREPORT = 100;
-unsigned DREPORT = 10000;
+unsigned TREPORT = 50;
+unsigned DREPORT = 5000;
 
 dynet::Dict sd;
 dynet::Dict td;
@@ -111,173 +111,99 @@ template <class rnn_t> int main_body(variables_map vm);
 
 int main(int argc, char** argv)
 {
+    cerr << "*** DyNet initialization ***" << endl;
     auto dyparams = dynet::extract_dynet_params(argc, argv);
     dynet::initialize(dyparams);
 
     // command line processing
     variables_map vm;
     options_description opts("Allowed options");
-    opts.add_options()("help", "print help message")("config,c",
-        value<string>(),
-        "config file specifying additional command line options")
+    // clang-format off
+    opts.add_options()
+        ("help", "print help message")
+        ("config,c", value<string>(), "config file specifying additional command line options")
         //-----------------------------------------
-        ("train,t", value<vector<string> >(),
-            "file containing training sentences, with each line consisting of "
-            "source ||| target.")("devel,d", value<string>(),
-            "file containing development sentences.")("test,T", value<string>(),
-            "file containing testing sentences")("slen_limit",
-            value<unsigned>()->default_value(0),
-            "limit the sentence length (either source or target); none by "
-            "default")("src_vocab", value<string>()->default_value(""),
-            "file containing source vocabulary file; none by default (will be "
-            "built from train file); none by default")("trg_vocab",
-            value<string>()->default_value(""),
-            "file containing target vocabulary file; none by default (will be "
-            "built from train file); none by default")
+        ("train,t", value<vector<string> >(), "file containing training sentences, with each line consisting of source ||| target.")     
+        ("devel,d", value<string>(), "file containing development sentences.")
+        ("test,T", value<string>(), "file containing testing sentences")
+        ("slen_limit", value<unsigned>()->default_value(0), "limit the sentence length (either source or target); none by default")
+        ("src_vocab", value<string>()->default_value(""), "file containing source vocabulary file; none by default (will be built from train file)")
+        ("trg_vocab", value<string>()->default_value(""), "file containing target vocabulary file; none by default (will be built from train file)")
+        ("train_percent", value<unsigned>()->default_value(100), "use <num> percent of sentences in training data; full by default")
         //-----------------------------------------
-        ("rescore,r", "rescore (source, target) pairs in testing, default: "
-                      "translate source only")("beam,b",
-            value<unsigned>()->default_value(1),
-            "size of beam in decoding; 1: greedy")("nbest_size",
-            value<unsigned>()->default_value(1),
-            "nbest size of translation generation/decoding; 1 by default")(
-            "print_nbest_scores",
-            "print nbest translations with their scores; no by default")(
-            "kbest,K", value<string>(),
-            "test on kbest inputs using monolingual Markov model")(
-            "ensemble_conf", value<string>(), "specify the configuration of "
-                                              "different AM models for "
-                                              "ensemble decoding")
+        ("rescore,r", "rescore (source, target) pairs in testing, default: translate source only")
+        ("beam,b", value<unsigned>()->default_value(1), "size of beam in decoding; 1: greedy")
+        ("nbest_size", value<unsigned>()->default_value(1), "nbest size of translation generation/decoding; 1 by default")
+        ("print_nbest_scores", "print nbest translations with their scores; no by default")
+        ("kbest,K", value<string>(), "test on kbest inputs using monolingual Markov model")
+        ("ensemble_conf", value<string>(), "specify the configuration of different AM models for ensemble decoding")
         //-----------------------------------------
-        ("minibatch_size", value<unsigned>()->default_value(1),
-            "impose the minibatch size for training (support both GPU and "
-            "CPU); no by default")("dynet-autobatch",
-            value<unsigned>()->default_value(0),
-            "impose the auto-batch mode (support both GPU and CPU); no by "
-            "default") //--dynet-autobatch 1
+        ("minibatch_size", value<unsigned>()->default_value(1), "impose the minibatch size for training (support both GPU and CPU); no by default")
+        ("dynet-autobatch", value<unsigned>()->default_value(0), "impose the auto-batch mode (support both GPU and CPU); no by default") //--dynet-autobatch 1      
         //-----------------------------------------
-        ("sgd_trainer", value<unsigned>()->default_value(0),
-            "use specific SGD trainer (0: vanilla SGD; 1: momentum SGD; 2: "
-            "Adagrad; 3: AdaDelta; 4: Adam; 5: RMSProp; 6: cyclical SGD)")(
-            "sparse_updates", value<bool>()->default_value(true),
-            "enable/disable sparse update(s) for lookup parameter(s); true by "
-            "default")("g_clip_threshold", value<float>()->default_value(5.f),
-            "use specific gradient clipping threshold "
-            "(https://arxiv.org/pdf/1211.5063.pdf); 5 by default")
+        ("sgd_trainer", value<unsigned>()->default_value(0), "use specific SGD trainer (0: vanilla SGD; 1: momentum SGD; 2: Adagrad; 3: AdaDelta; 4: Adam; 5: RMSProp; 6: cyclical SGD)")
+        ("sparse_updates", value<bool>()->default_value(true), "enable/disable sparse update(s) for lookup parameter(s); true by default")
+        ("g_clip_threshold", value<float>()->default_value(5.f), "use specific gradient clipping threshold (https://arxiv.org/pdf/1211.5063.pdf); 5 by default")
         //-----------------------------------------
-        ("initialise,i", value<string>(), "load initial parameters from file")(
-            "parameters,p", value<string>(),
-            "save best parameters to this file")
+        ("initialise,i", value<string>(), "load initial parameters from file")
+        ("parameters,p", value<string>(), "save best parameters to this file")
         //-----------------------------------------
-        ("eos_padding", value<unsigned>()->default_value(0),
-            "impose the </s> padding for all training target instances; none "
-            "(0) by default")
+        ("eos_padding", value<unsigned>()->default_value(0), "impose <num> of </s> padding(s) (at the end) for all training target instances; none (0) by default")
         //-----------------------------------------
-        ("slayers", value<unsigned>()->default_value(SLAYERS),
-            "use <num> layers for source RNN components")("tlayers",
-            value<unsigned>()->default_value(TLAYERS),
-            "use <num> layers for target RNN components")("align,a",
-            value<unsigned>()->default_value(ALIGN_DIM),
-            "use <num> dimensions for alignment projection")("hidden,h",
-            value<unsigned>()->default_value(HIDDEN_DIM),
-            "use <num> dimensions for recurrent hidden states")
+        ("slayers", value<unsigned>()->default_value(SLAYERS), "use <num> layers for source RNN components")
+        ("tlayers", value<unsigned>()->default_value(TLAYERS), "use <num> layers for target RNN components")
+        ("align,a", value<unsigned>()->default_value(ALIGN_DIM), "use <num> dimensions for alignment projection")
+        ("hidden,h", value<unsigned>()->default_value(HIDDEN_DIM), "use <num> dimensions for recurrent hidden states")
         //-----------------------------------------
-        ("dropout_enc", value<float>()->default_value(0.f),
-            "use dropout (Gal et al., 2016) for RNN encoder(s), e.g., 0.5 "
-            "(input=0.5;hidden=0.5;cell=0.5) for LSTM; none by default")(
-            "dropout_dec", value<float>()->default_value(0.f),
-            "use dropout (Gal et al., 2016) for RNN decoder, e.g., 0.5 "
-            "(input=0.5;hidden=0.5;cell=0.5) for LSTM; none by default")
+        ("dropout_enc", value<float>()->default_value(0.f), "use dropout (Gal et al., 2016) for RNN encoder(s), e.g., 0.5 (input=0.5;hidden=0.5;cell=0.5) for LSTM; none by default")
+        ("dropout_dec", value<float>()->default_value(0.f), "use dropout (Gal et al., 2016) for RNN decoder, e.g., 0.5 (input=0.5;hidden=0.5;cell=0.5) for LSTM; none by default")
         //-----------------------------------------
-        ("topk,k", value<unsigned>()->default_value(100),
-            "use <num> top kbest entries, used with --kbest")("epochs,e",
-            value<unsigned>()->default_value(20),
-            "maximum number of training epochs")("patience",
-            value<unsigned>()->default_value(0),
-            "no. of times in which the model has not been improved for early "
-            "stopping; default none")
+        ("topk,k", value<unsigned>()->default_value(100), "use <num> top kbest entries, used with --kbest")
+        ("epochs,e", value<unsigned>()->default_value(20), "maximum number of training epochs")
+        ("patience", value<unsigned>()->default_value(0), "no. of times in which the model has not been improved for early stopping; default none")
         //-----------------------------------------
-        ("lr_eta", value<float>()->default_value(0.01f),
-            "SGD learning rate value (e.g., 0.1 for simple SGD trainer or "
-            "smaller 0.001 for ADAM trainer)")("lr_eta_decay",
-            value<float>()->default_value(2.0f),
-            "SGD learning rate decay value")
+        ("lr_eta", value<float>()->default_value(0.01f), "SGD learning rate value (e.g., 0.1 for simple SGD trainer or smaller 0.001 for ADAM trainer)")
+        ("lr_eta_decay", value<float>()->default_value(2.0f), "SGD learning rate decay value")
         //-----------------------------------------
-        ("lr_epochs", value<unsigned>()->default_value(0),
-            "no. of epochs for starting learning rate annealing (e.g., "
-            "halving)") // learning rate scheduler 1
-        ("lr_patience", value<unsigned>()->default_value(0),
-            "no. of times in which the model has not been improved, e.g., for "
-            "starting learning rate annealing (e.g., halving)") // learning rate
-                                                                // scheduler 2
-                                                                // (which
-                                                                // normally
-                                                                // works better
-                                                                // than learning
-                                                                // rate
-                                                                // scheduler 1,
-                                                                // e.g., 1-2
-                                                                // BLEU scores
-                                                                // better on
-                                                                // Multi30K
-                                                                // dataset)
+        ("lr_epochs", value<unsigned>()->default_value(0), "no. of epochs for starting learning rate annealing (e.g., halving)") // learning rate scheduler 1
+        ("lr_patience", value<unsigned>()->default_value(0), "no. of times in which the model has not been improved, e.g., for starting learning rate annealing (e.g., halving)") // learning rate scheduler 2 (which normally works better than learning rate scheduler 1, e.g., 1-2 BLEU scores better on Multi30K dataset)
         //-----------------------------------------
-        ("r2l_target", "use right-to-left direction for target during "
-                       "training; default not")
+        ("r2l_target", "use right-to-left direction for target during training; default not")
         //-----------------------------------------
-        ("gru", "use Gated Recurrent Unit (GRU) for recurrent structure; "
-                "default RNN")("lstm", "use Vanilla Long Short Term Memory "
-                                       "(LSTM) for recurrent structure; "
-                                       "default RNN")("dglstm",
-            "use Depth-Gated Long Short Term Memory (DGLSTM) (Kaisheng et al., "
-            "2015; https://arxiv.org/abs/1508.03790) for recurrent structure; "
-            "default RNN")
+        ("gru", "use Gated Recurrent Unit (GRU) for recurrent structure; default RNN")
+        ("lstm", "use Vanilla Long Short Term Memory (LSTM) for recurrent structure; default RNN")
+        ("dglstm", "use Depth-Gated Long Short Term Memory (DGLSTM) (Kaisheng et al., 2015; https://arxiv.org/abs/1508.03790) for recurrent structure; default RNN")
         //-----------------------------------------
-        ("bidirectional", "use bidirectional recurrent hidden states as source "
-                          "embeddings, rather than word embeddings")
+        ("bidirectional", "use bidirectional recurrent hidden states as source embeddings, rather than word embeddings")
         //-----------------------------------------
-        ("giza", "use GIZA++ style features in attentional components "
-                 "(corresponds to all of the 'gz' options)")(
-            "gz-position", "use GIZA++ positional index features")(
-            "gz-markov", "use GIZA++ markov context features")(
-            "gz-fertility", "use GIZA++ fertility type features")("fertility,f",
-            "learn Normal model of word fertility values")("fert-weight",
-            value<float>()->default_value(1.0f),
-            "impose a weight for fertility model, 1.0 by default")(
-            "fert-stats,F",
-            "display computed fertility values on the development set")
+        ("giza", "use GIZA++ style features in attentional components (corresponds to all of the 'gz' options)")
+        ("gz-position", "use GIZA++ positional index features")
+        ("gz-markov", "use GIZA++ markov context features")
+        ("gz-fertility", "use GIZA++ fertility type features")
+        ("fertility,f", "learn Normal model of word fertility values")
+        ("fert-weight", value<float>()->default_value(1.0f), "impose a weight for fertility model, 1.0 by default")
+        ("fert-stats,F", "display computed fertility values on the development set")
         //-----------------------------------------
-        ("curriculum", "use 'curriculum' style learning, focusing on easy "
-                       "problems (e.g., shorter sentences) in earlier epochs")
+        ("curriculum", "use 'curriculum' style learning, focusing on easy problems (e.g., shorter sentences) in earlier epochs")
         //-----------------------------------------
-        ("swap",
-            "swap roles of source and target, i.e., learn p(source|target)")(
-            "swap_T", "swap roles of source and target on --test or -T, "
-                      "applied for rescoring only")
+        ("swap", "swap roles of source and target, i.e., learn p(source|target)")
+        ("swap_T", "swap roles of source and target on --test or -T, applied for rescoring only")
         //-----------------------------------------
-        ("document,D", "use previous sentence as document context; requires "
-                       "document id prefix in input files")
+        ("document,D", "use previous sentence as document context; requires document id prefix in input files")
         //-----------------------------------------
-        ("coverage,C", value<float>()->default_value(0.0f),
-            "impose alignment coverage penalty in training, with given "
-            "coefficient")
+        ("coverage,C", value<float>()->default_value(0.0f), "impose alignment coverage penalty in training, with given coefficient")        
         //-----------------------------------------
         ("display", "just display alignments instead of training or decoding")
         //-----------------------------------------
-        ("treport", value<unsigned>()->default_value(100),
-            "no. of training instances for reporting current model status on "
-            "training data")("dreport", value<unsigned>()->default_value(50000),
-            "no. of training instances for reporting current model status on "
-            "development data (dreport = N * treport)")
+        ("treport", value<unsigned>()->default_value(50), "no. of training instances for reporting current model status on training data")
+        ("dreport", value<unsigned>()->default_value(5000), "no. of training instances for reporting current model status on development data (dreport = N * treport)")
         //-----------------------------------------
         ("verbose,v", "be extremely chatty")
         //-----------------------------------------
-        ("debug",
-            "enable/disable simpler debugging by immediate computing mode or "
-            "checking validity (refers to "
-            "http://dynet.readthedocs.io/en/latest/debugging.html)") // for CPU
-                                                                     // only
-        ;
+        ("debug", "enable/disable simpler debugging by immediate computing mode or checking validity (refers to http://dynet.readthedocs.io/en/latest/debugging.html)")// for CPU only
+    ;
+    // clang-format on
+
     store(parse_command_line(argc, argv, opts), vm);
     if (vm.count("config") > 0) {
         ifstream config(vm["config"].as<string>().c_str());
@@ -285,7 +211,12 @@ int main(int argc, char** argv)
     }
     notify(vm);
 
-    cerr << "PID=" << ::getpid() << endl;
+    cerr << endl << "PID=" << ::getpid() << endl;
+    cerr << "Command: ";
+    for (int i = 0; i < argc; i++) {
+        cerr << argv[i] << " ";
+    }
+    cerr << endl;
 
     if (vm.count("help") || vm.count("train") != 1
         || (vm.count("devel") != 1
@@ -361,7 +292,7 @@ template <class rnn_t> int main_body(variables_map vm)
     // training = Read_Corpus(vm["train"].as<string>(), doco, true,
     // vm["slen_limit"].as<unsigned>(), r2l_target & !swap,
     // vm["eos_padding"].as<unsigned>());
-    cerr << "Reading training data from " << train_paths[0] << "...\n";
+    cerr << endl << "Reading training data from " << train_paths[0] << "...\n";
     training = Read_Corpus(train_paths[0], doco, true,
         vm["slen_limit"].as<unsigned>(), r2l_target & !swap,
         vm["eos_padding"].as<unsigned>());
@@ -383,6 +314,25 @@ template <class rnn_t> int main_body(variables_map vm)
             vm["eos_padding"].as<unsigned>());
         cerr << "Performing incremental training..." << endl;
     }
+
+    // limit the percent of training data to be used
+    unsigned train_percent = vm["train_percent"].as<unsigned>();
+    if (train_percent < 100 && train_percent > 0) {
+        cerr << "Only use " << train_percent << "% of " << training.size()
+             << " training instances: ";
+        unsigned int rev_pos = train_percent * training.size() / 100;
+        training.erase(training.begin() + rev_pos, training.end());
+        cerr << training.size() << " instances remaining!" << endl;
+    } else if (train_percent != 100) {
+        cerr << "Invalid --train_percent <num> used. <num> must be (0,100]"
+             << endl;
+        return EXIT_FAILURE;
+    }
+
+    if (DREPORT >= training.size())
+        cerr << "WARNING: --dreport <num> (" << DREPORT << ")"
+             << " is too large, <= training data size (" << training.size()
+             << ")" << endl;
 
     // set up <s>, </s>, <unk> ids
     sd.set_unk("<unk>");
@@ -465,6 +415,7 @@ template <class rnn_t> int main_body(variables_map vm)
     if (!vm.count("test") && !vm.count("kbest")) // training phase
         cerr << "Parameters will be written to: " << fname << endl;
 
+    // setup SGD trainer
     ParameterCollection model;
     Trainer* sgd = nullptr;
     if (!vm.count("test") && !vm.count("kbest") && !vm.count("fert-stats")) {
@@ -511,11 +462,11 @@ template <class rnn_t> int main_body(variables_map vm)
         cerr << endl << "%% Using " << flavour << " recurrent units" << endl;
 
         // AttentionalModel<rnn_t> am(&model, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE
-        //	, SLAYERS, TLAYERS, HIDDEN_DIM, ALIGN_DIM
-        //	, bidir
-        //	, giza_pos, giza_markov, giza_fert
-        //	, doco
-        //	, fert);
+        //  , SLAYERS, TLAYERS, HIDDEN_DIM, ALIGN_DIM
+        //  , bidir
+        //  , giza_pos, giza_markov, giza_fert
+        //  , doco
+        //  , fert);
         pam.reset(new AttentionalModel<rnn_t>(&model, SRC_VOCAB_SIZE,
             TGT_VOCAB_SIZE, SLAYERS, TLAYERS, HIDDEN_DIM, ALIGN_DIM, bidir,
             giza_pos, giza_markov, giza_fert, doco, fert));
@@ -830,9 +781,9 @@ void Test_Decode_Nbest(ParameterCollection& model
             stringstream ss;
             bool first = true;
             for (auto &w: target) {
-                    if (!first) ss << " ";
-                    ss << td.convert(w);
-                    first = false;
+                if (!first) ss << " ";
+                ss << td.convert(w);
+                first = false;
             }
             ss << " ||| ";
             cout << ss.str();
@@ -1707,7 +1658,7 @@ Corpus Read_Corpus(const string& filename, bool doco, bool cid, unsigned slen,
                 continue; // ignore this sentence
         }
 
-        // add additional </s> paddings
+        // add additional </s> paddings at the end of target
         if (eos_padding > 0) {
             for (unsigned i = 0; i < eos_padding; i++) {
                 target.push_back(td.convert("</s>"));
@@ -1804,7 +1755,7 @@ void Load_Vocabs(const string& src_vocab_file, const string& trg_vocab_file)
     if ("" == src_vocab_file || "" == trg_vocab_file)
         return;
 
-    cerr << "Loading vocabularies from files..." << endl;
+    cerr << endl << "Loading vocabularies from files..." << endl;
     cerr << "Source vocabulary file: " << src_vocab_file << endl;
     cerr << "Target vocabulary file: " << trg_vocab_file << endl;
     ifstream if_src_vocab(src_vocab_file), if_trg_vocab(trg_vocab_file);
