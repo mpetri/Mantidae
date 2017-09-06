@@ -1,0 +1,1 @@
+/usr/bin/c++    -msse4.2 -std=c++11 -Wall -Wextra -DNDEBUG -O3 -DNDEBUG   CMakeFiles/select_support_test.dir/select_support_test.cpp.o  -o select_support_test -rdynamic ../lib/libsdsl.a ../external/googletest/libgtest.a ../external/libdivsufsort/lib/libdivsufsort.a ../external/libdivsufsort/lib/libdivsufsort64.a -lpthread 

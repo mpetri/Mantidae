@@ -1,0 +1,1 @@
+/usr/bin/c++    -msse4.2 -std=c++11 -Wall -Wextra -DNDEBUG -O3 -DNDEBUG   CMakeFiles/sa_construct_test.dir/sa_construct_test.cpp.o  -o sa_construct_test -rdynamic ../lib/libsdsl.a ../external/googletest/libgtest.a ../external/libdivsufsort/lib/libdivsufsort.a ../external/libdivsufsort/lib/libdivsufsort64.a -lpthread 
