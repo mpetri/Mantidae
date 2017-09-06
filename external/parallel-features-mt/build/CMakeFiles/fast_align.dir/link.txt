@@ -1,1 +1,0 @@
-/usr/bin/c++    -msse4.2 -g   CMakeFiles/fast_align.dir/external/fast_align/src/fast_align.cc.o CMakeFiles/fast_align.dir/external/fast_align/src/ttables.cc.o  -o fast_align -rdynamic 

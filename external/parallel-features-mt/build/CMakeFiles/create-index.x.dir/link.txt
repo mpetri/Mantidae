@@ -1,1 +1,0 @@
-/usr/bin/c++    -msse4.2 -g   CMakeFiles/create-index.x.dir/src/create-index.cpp.o  -o create-index.x -rdynamic external/sdsl-lite-master/lib/libsdsl.a -lpthread external/sdsl-lite-master/external/libdivsufsort/lib/libdivsufsort.a external/sdsl-lite-master/external/libdivsufsort/lib/libdivsufsort64.a -lboost_program_options -lboost_filesystem -lboost_system 
