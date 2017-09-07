@@ -109,6 +109,48 @@ void Read_Numbered_Sentence_Pair(const std::string& line, std::vector<int>* s,
 
 template <class rnn_t> int main_body(variables_map vm);
 
+foreign_sentence
+undo_bpe(std::string bpe_sentence,parallel_collection& col)
+{
+    std::vector<uint64_t> sent;
+    static std::regex bpe_epx("@@ ");
+    std::string nobpe = std::regex_replace(bpe_sentence, bpe_epx, "");
+    auto fs = create_sentence(nobpe, collection.vocab_foreign);
+    return fs;
+}
+
+std::string
+extract_foreign(std::string sentence)
+{
+    return sentence.substr(0,s.find(" ||| "));
+}
+
+std::vector<float>
+compute_alignment_matrix(parallel_index& index,parallel_collection& col,std::string bpe_sentence)
+{
+    auto fbpe_sentence = extract_foreign(bpe_sentence);
+    auto sentence = undo_bpe(fbpe_sentence,col);
+    return index.alignment_matrix(sentence);    
+}
+
+void build_count_model(variables_map cmdargs)
+{
+    auto sents_file = cmdargs["sents-file"].as<std::string>();
+    auto alignment_file = cmdargs["align-file"].as<std::string>();
+
+    auto collection = create_col_from_fastalign(sents_file, alignment_file);
+
+    auto index = create_index_from_col(collection);
+
+    auto bpe_file = cmdargs["train"].as<std::string>();
+    std::ifstream bpefs(bpe_file);
+    for (std::string sentence; std::getline(bpe_file, sentence); ) {
+        alignment_matrix.emplace_back(
+            compute_alignment_matrix(index,collection,sentence);
+        );
+    }
+}
+
 int main(int argc, char** argv)
 {
     cerr << "*** DyNet initialization ***" << endl;
@@ -122,6 +164,9 @@ int main(int argc, char** argv)
     opts.add_options()
         ("help", "print help message")
         ("config,c", value<string>(), "config file specifying additional command line options")
+        //-----------------------------------------
+        ("sents-file", value<vector<string> >(), "file containing training sentences, with each line consisting of source ||| target.")
+        ("align-file", value<vector<string> >(), "file containing alignments.")
         //-----------------------------------------
         ("train,t", value<vector<string> >(), "file containing training sentences, with each line consisting of source ||| target.")     
         ("devel,d", value<string>(), "file containing development sentences.")
@@ -211,6 +256,7 @@ int main(int argc, char** argv)
     }
     notify(vm);
 
+
     cerr << endl << "PID=" << ::getpid() << endl;
     cerr << "Command: ";
     for (int i = 0; i < argc; i++) {
@@ -225,6 +271,9 @@ int main(int argc, char** argv)
         cout << opts << "\n";
         return 1;
     }
+
+    // (0) build the count models
+    build_count_model(vm);
 
     if (vm.count("lstm"))
         return main_body<LSTMBuilder>(vm);
@@ -297,8 +346,7 @@ template <class rnn_t> int main_body(variables_map vm)
         vm["slen_limit"].as<unsigned>(), r2l_target & !swap,
         vm["eos_padding"].as<unsigned>());
     if ("" == vm["src_vocab"].as<string>()
-        && ""
-            == vm["trg_vocab"]
+        && "" == vm["trg_vocab"]
                    .as<string>()) // if not using external vocabularies
     {
         sd.freeze(); // no new word types allowed

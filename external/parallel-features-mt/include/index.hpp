@@ -54,7 +54,6 @@ public:
     cst_type english_cst;
     sdsl::int_vector<> english_sent_array;
     alignment_index alignment_stats;
-
 public:
     std::vector<alignment_info> alignment_probs(const foreign_sentence& fphrase,
         const english_sentence& ephrase, const foreign_token& focus)
